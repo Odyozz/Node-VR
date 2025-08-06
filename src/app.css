@@ -1,0 +1,133 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+:root {
+  --color-bg: #121212;
+  --color-bg-secondary: rgba(30, 30, 47, 0.75);
+  --color-text-primary: #cfd2d6;
+  --color-text-secondary: #aabedc;
+  --color-accent: #5a7fa8;
+  --color-accent-light: #8da8e1;
+  --color-alert: #d17b7b;
+  --color-node-own: #34d399;
+  --color-node-other: #f59e42;
+  --color-node-free: #fff;
+  --font-primary: 'Poppins', sans-serif;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  height: 100%;
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  background-color: var(--color-accent);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+button:hover {
+  background-color: var(--color-accent-light);
+}
+
+input, select, textarea {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid #2c2f44;
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  padding: 0.5rem;
+  font-family: var(--font-primary);
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--color-accent);
+  box-shadow: 0 0 5px var(--color-accent-light);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--color-text-secondary);
+  margin-top: 0;
+  font-weight: 700;
+}
+
+ul {
+  padding-left: 1.25rem;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+p {
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.flex {
+  display: flex;
+  gap: 1rem;
+}
+
+.rounded {
+  border-radius: 8px;
+}
+
+.shadow {
+  box-shadow: 0 0 12px #0008;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-accent {
+  color: var(--color-accent);
+}
+
+.text-alert {
+  color: var(--color-alert);
+}
+
+.bg-secondary {
+  background-color: var(--color-bg-secondary);
+}
+
+/* Scrollbar for modern browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-accent);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent-light);
+}

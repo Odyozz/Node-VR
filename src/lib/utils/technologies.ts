@@ -1,0 +1,377 @@
+export type TechnologyBranch = 'construction' | 'armyUnlock' | 'prodBoost' | 'armyBoost';
+
+export interface TechnologyNode {
+  key: string;
+  name: string;
+  description: string;
+  branch: TechnologyBranch;
+  cost: { data: number; cpu: number; bandwidth: number };
+  time: number;
+  prereqs?: string[]; // autres technos
+  buildingPrereqs?: { [buildingId: string]: number }; // ex: { shield: 2 }
+  unlocksBuilding?: string;
+  unlocksUnit?: string;
+  bonus?: {
+    type: 'mineProd' | 'cpuProd' | 'bandwidthProd' | 'armyAtk' | 'armyDef' | 'armyProd' | string;
+    value: number;
+    targetKeys?: string[];
+  }
+}
+
+// === Construction branch avec prérequis complexes ===
+export const technologyTree: TechnologyNode[] = [
+  {
+    key: 'unlock_shield',
+    name: 'Débloquer Bouclier Numérique',
+    description: 'Accessible dès le départ.',
+    branch: 'construction',
+    cost: { data: 0, cpu: 0, bandwidth: 0 },
+    time: 0,
+    unlocksBuilding: 'shield',
+  },
+  {
+    key: 'unlock_activeDefense',
+    name: 'Débloquer Système de Défense Actif',
+    description: 'Nécessite Bouclier Numérique niveau 2.',
+    branch: 'construction',
+    cost: { data: 1200, cpu: 500, bandwidth: 130 },
+    time: 900,
+    prereqs: ['unlock_shield'],
+    buildingPrereqs: { shield: 2 },
+    unlocksBuilding: 'activeDefense',
+  },
+  {
+    key: 'unlock_firewall',
+    name: 'Débloquer Murs Firewall',
+    description: 'Nécessite Défense Actif niveau 2 et/ou Bouclier Numérique niveau 3.',
+    branch: 'construction',
+    cost: { data: 1600, cpu: 800, bandwidth: 250 },
+    time: 1300,
+    prereqs: ['unlock_activeDefense'],
+    buildingPrereqs: { activeDefense: 2, shield: 3 },
+    unlocksBuilding: 'firewall',
+  },
+  {
+    key: 'unlock_surveillanceStation',
+    name: 'Débloquer Station de Surveillance',
+    description: 'Nécessite Murs Firewall niveau 1.',
+    branch: 'construction',
+    cost: { data: 1700, cpu: 900, bandwidth: 280 },
+    time: 1400,
+    prereqs: ['unlock_firewall'],
+    buildingPrereqs: { firewall: 1 },
+    unlocksBuilding: 'surveillanceStation',
+  },
+  {
+    key: 'unlock_mineOptimization',
+    name: 'Débloquer Optimisation des Mines',
+    description: 'Nécessite Bouclier Numérique niveau 2 et Mine de Données niveau 3.',
+    branch: 'construction',
+    cost: { data: 1900, cpu: 500, bandwidth: 200 },
+    time: 1400,
+    prereqs: ['unlock_shield'],
+    buildingPrereqs: { shield: 2, mineData: 3 },
+    unlocksBuilding: 'mineOptimization',
+  },
+  {
+    key: 'unlock_defenseOptimization',
+    name: 'Débloquer Optimisation de Défense',
+    description: 'Nécessite Défense Actif niveau 3 et Murs Firewall niveau 2.',
+    branch: 'construction',
+    cost: { data: 2000, cpu: 900, bandwidth: 260 },
+    time: 1500,
+    prereqs: ['unlock_activeDefense', 'unlock_firewall'],
+    buildingPrereqs: { activeDefense: 3, firewall: 2 },
+    unlocksBuilding: 'defenseOptimization',
+  },
+  {
+    key: 'unlock_commandCenter',
+    name: 'Débloquer Centre de Commande',
+    description: 'Nécessite Optimisation Défense 1 & Optimisation Mines 1.',
+    branch: 'construction',
+    cost: { data: 2100, cpu: 1100, bandwidth: 320 },
+    time: 1600,
+    prereqs: ['unlock_defenseOptimization', 'unlock_mineOptimization'],
+    buildingPrereqs: { defenseOptimization: 1, mineOptimization: 1 },
+    unlocksBuilding: 'commandCenter',
+  },
+  {
+    key: 'unlock_researchLab',
+    name: 'Débloquer Laboratoire de Recherche',
+    description: 'Nécessite Centre de Commande niveau 2 & Station Surveillance niveau 1.',
+    branch: 'construction',
+    cost: { data: 2400, cpu: 1200, bandwidth: 350 },
+    time: 1800,
+    prereqs: ['unlock_commandCenter', 'unlock_surveillanceStation'],
+    buildingPrereqs: { commandCenter: 2, surveillanceStation: 1 },
+    unlocksBuilding: 'researchLab',
+  },
+  {
+    key: 'unlock_factory',
+    name: 'Débloquer Usine de Construction',
+    description: 'Nécessite Labo Recherche 2 & Centre Commande 3.',
+    branch: 'construction',
+    cost: { data: 2600, cpu: 1300, bandwidth: 400 },
+    time: 1900,
+    prereqs: ['unlock_researchLab', 'unlock_commandCenter'],
+    buildingPrereqs: { researchLab: 2, commandCenter: 3 },
+    unlocksBuilding: 'factory',
+  },
+  {
+    key: 'unlock_transportNetwork',
+    name: 'Débloquer Réseau de Transport',
+    description: 'Nécessite Usine Construction 2 & Hangar de Données 4.',
+    branch: 'construction',
+    cost: { data: 2800, cpu: 1450, bandwidth: 470 },
+    time: 2100,
+    prereqs: ['unlock_factory'],
+    buildingPrereqs: { factory: 2, dataStorage: 4 },
+    unlocksBuilding: 'transportNetwork',
+  },
+  {
+    key: 'unlock_cryptographyCenter',
+    name: 'Débloquer Centre de Cryptographie',
+    description: 'Nécessite Labo Recherche 4 & Station Surveillance 3.',
+    branch: 'construction',
+    cost: { data: 3100, cpu: 1600, bandwidth: 580 },
+    time: 2300,
+    prereqs: ['unlock_researchLab', 'unlock_surveillanceStation'],
+    buildingPrereqs: { researchLab: 4, surveillanceStation: 3 },
+    unlocksBuilding: 'cryptographyCenter',
+  },
+  {
+    key: 'unlock_advancedServers',
+    name: 'Débloquer Serveurs de Calcul Avancés',
+    description: 'Nécessite Centre Commande 5, Centre Crypto 2, Labo Recherche 5.',
+    branch: 'construction',
+    cost: { data: 3700, cpu: 2100, bandwidth: 900 },
+    time: 2600,
+    prereqs: ['unlock_commandCenter', 'unlock_cryptographyCenter', 'unlock_researchLab'],
+    buildingPrereqs: { commandCenter: 5, cryptographyCenter: 2, researchLab: 5 },
+    unlocksBuilding: 'advancedServers',
+  },
+
+  // === BRANCHE 2: Déverrouillage armée ===
+    {
+    key: 'unlock_agentEspion',
+    name: 'Débloquer Agent Espion',
+    description: 'Espionnage des Nodes ennemis.',
+    branch: 'armyUnlock',
+    cost: { data: 700, cpu: 250, bandwidth: 120 },
+    time: 800,
+    prereqs: [], // à débloquer dès que possible
+    buildingPrereqs: { researchLab: 2, surveillanceStation: 1 },
+    unlocksUnit: 'agentEspion',
+    // Ajoute ici si besoin une tech requise ("espionnageTech"), sinon gérée côté backend/unit
+  },
+  {
+    key: 'unlock_chasseurNumerique',
+    name: 'Débloquer Chasseur Numérique',
+    description: 'Intercepteur rapide pour défendre activement.',
+    branch: 'armyUnlock',
+    cost: { data: 1000, cpu: 350, bandwidth: 160 },
+    time: 1200,
+    prereqs: [],
+    buildingPrereqs: { factory: 2 },
+    unlocksUnit: 'chasseurNumerique',
+    // Idem, tu peux forcer une tech "interceptionTech" ici ou côté unité.
+  },
+  {
+    key: 'unlock_hackerVR',
+    name: 'Débloquer Hacker VR',
+    description: 'Sabotage avancé. Nécessite de la recherche et de l’espionnage.',
+    branch: 'armyUnlock',
+    cost: { data: 850, cpu: 320, bandwidth: 180 },
+    time: 1100,
+    prereqs: [],
+    buildingPrereqs: { researchLab: 3, surveillanceStation: 2 },
+    unlocksUnit: 'hackerVR',
+    // Tech "hackingTech" à ajouter si besoin
+  },
+  {
+    key: 'unlock_transporteurVR',
+    name: 'Débloquer Transporteur VR',
+    description: 'Transport efficace du butin.',
+    branch: 'armyUnlock',
+    cost: { data: 1100, cpu: 320, bandwidth: 240 },
+    time: 1300,
+    prereqs: [],
+    buildingPrereqs: { factory: 3 },
+    unlocksUnit: 'transporteurVR',
+    // Tech "logisticsTech" à ajouter si besoin
+  },
+  {
+    key: 'unlock_bombardierVirtuel',
+    name: 'Débloquer Bombardier Virtuel',
+    description: 'Spécialiste destruction de défenses.',
+    branch: 'armyUnlock',
+    cost: { data: 1300, cpu: 480, bandwidth: 180 },
+    time: 1500,
+    prereqs: [],
+    buildingPrereqs: { factory: 3, defenseOptimization: 2 },
+    unlocksUnit: 'bombardierVirtuel',
+    // Tech "demolitionTech" à ajouter si besoin
+  },
+  {
+    key: 'unlock_fregateNumerique',
+    name: 'Débloquer Frégate Numérique',
+    description: 'Unité middle-game polyvalente.',
+    branch: 'armyUnlock',
+    cost: { data: 2000, cpu: 900, bandwidth: 300 },
+    time: 2000,
+    prereqs: [],
+    buildingPrereqs: { factory: 3, commandCenter: 2 },
+    unlocksUnit: 'fregateNumerique',
+    // Tech "fabricationTech" niveau 2 à ajouter si besoin
+  },
+  {
+    key: 'unlock_titanDigital',
+    name: 'Débloquer Titan Digital',
+    description: 'Puissante unité d’attaque, résiliente.',
+    branch: 'armyUnlock',
+    cost: { data: 1500, cpu: 600, bandwidth: 280 },
+    time: 2000,
+    prereqs: [],
+    buildingPrereqs: { factory: 4, defenseOptimization: 3, cpuStorage: 4 },
+    unlocksUnit: 'titanDigital',
+    // Tech "heavyArmorTech" à ajouter si besoin
+  },
+  {
+    key: 'unlock_croiseurDigital',
+    name: 'Débloquer Croiseur Digital',
+    description: 'Unité très puissante, réservée au late-game.',
+    branch: 'armyUnlock',
+    cost: { data: 3000, cpu: 1800, bandwidth: 700 },
+    time: 2500,
+    prereqs: [],
+    buildingPrereqs: { factory: 4, commandCenter: 4, researchLab: 5 },
+    unlocksUnit: 'croiseurDigital',
+    // Tech "heavyArmorTech" niveau 2 à ajouter si besoin
+  },
+  {
+    key: 'unlock_cuirasseVirtuel',
+    name: 'Débloquer Cuirassé Virtuel',
+    description: 'Unité ultime, nécessite toute l’infrastructure montée.',
+    branch: 'armyUnlock',
+    cost: { data: 5000, cpu: 3200, bandwidth: 1100 },
+    time: 4000,
+    prereqs: [],
+    buildingPrereqs: {
+      factory: 5,
+      commandCenter: 5,
+      advancedServers: 1,
+      bandwidthStorage: 5
+    },
+    unlocksUnit: 'cuirasseVirtuel',
+    // Tech "heavyArmorTech" niveau 3 à ajouter si besoin
+  },
+  // === BRANCHE 3: Boost Production ===
+  {
+    key: 'boost_mine_prod_1',
+    name: 'Optimisation Mines I',
+    description: '+10% production de données.',
+    branch: 'prodBoost',
+    cost: { data: 1000, cpu: 400, bandwidth: 120 },
+    time: 1200,
+    bonus: { type: 'mineProd', value: 0.10 },
+  },
+  {
+    key: 'boost_mine_prod_2',
+    name: 'Optimisation Mines II',
+    description: '+10% production de données (cumul).',
+    branch: 'prodBoost',
+    cost: { data: 2000, cpu: 900, bandwidth: 250 },
+    time: 2000,
+    prereqs: ['boost_mine_prod_1'],
+    bonus: { type: 'mineProd', value: 0.10 },
+  },
+  {
+    key: 'boost_cpu_prod_1',
+    name: 'Optimisation CPU I',
+    description: '+10% production de CPU.',
+    branch: 'prodBoost',
+    cost: { data: 1000, cpu: 700, bandwidth: 220 },
+    time: 1300,
+    bonus: { type: 'cpuProd', value: 0.10 },
+  },
+  {
+    key: 'boost_cpu_prod_2',
+    name: 'Optimisation CPU II',
+    description: '+10% production de CPU (cumul).',
+    branch: 'prodBoost',
+    cost: { data: 2000, cpu: 1400, bandwidth: 500 },
+    time: 2200,
+    prereqs: ['boost_cpu_prod_1'],
+    bonus: { type: 'cpuProd', value: 0.10 },
+  },
+  {
+    key: 'boost_bandwidth_prod_1',
+    name: 'Optimisation Bande Passante I',
+    description: '+10% production de bande passante.',
+    branch: 'prodBoost',
+    cost: { data: 1200, cpu: 350, bandwidth: 300 },
+    time: 1300,
+    bonus: { type: 'bandwidthProd', value: 0.10 },
+  },
+  {
+    key: 'boost_bandwidth_prod_2',
+    name: 'Optimisation Bande Passante II',
+    description: '+10% production de bande passante (cumul).',
+    branch: 'prodBoost',
+    cost: { data: 2500, cpu: 900, bandwidth: 600 },
+    time: 2200,
+    prereqs: ['boost_bandwidth_prod_1'],
+    bonus: { type: 'bandwidthProd', value: 0.10 },
+  },
+
+  // === BRANCHE 4: Boost Armée ===
+  {
+    key: 'army_atk_boost_1',
+    name: 'Optimisation Attaque I',
+    description: '+10% dégâts toutes unités.',
+    branch: 'armyBoost',
+    cost: { data: 1500, cpu: 800, bandwidth: 250 },
+    time: 1800,
+    bonus: { type: 'armyAtk', value: 0.10 },
+  },
+  {
+    key: 'army_def_boost_1',
+    name: 'Optimisation Défense I',
+    description: '+10% défense toutes unités.',
+    branch: 'armyBoost',
+    cost: { data: 1500, cpu: 800, bandwidth: 250 },
+    time: 1800,
+    bonus: { type: 'armyDef', value: 0.10 },
+  },
+  {
+    key: 'army_atk_boost_2',
+    name: 'Optimisation Attaque II',
+    description: '+10% dégâts toutes unités (cumul).',
+    branch: 'armyBoost',
+    cost: { data: 3000, cpu: 1600, bandwidth: 500 },
+    time: 3200,
+    prereqs: ['army_atk_boost_1'],
+    bonus: { type: 'armyAtk', value: 0.10 },
+  },
+  {
+    key: 'army_def_boost_2',
+    name: 'Optimisation Défense II',
+    description: '+10% défense toutes unités (cumul).',
+    branch: 'armyBoost',
+    cost: { data: 3000, cpu: 1600, bandwidth: 500 },
+    time: 3200,
+    prereqs: ['army_def_boost_1'],
+    bonus: { type: 'armyDef', value: 0.10 },
+  },
+  {
+    key: 'army_prod_boost_1',
+    name: 'Optimisation Production Armée',
+    description: '+10% vitesse production armée.',
+    branch: 'armyBoost',
+    cost: { data: 2500, cpu: 900, bandwidth: 700 },
+    time: 2200,
+    bonus: { type: 'armyProd', value: 0.10 },
+  },
+  // Tu peux ajouter d'autres bonus spécifiques ici, genre bonus pour types précis de vaisseaux, etc.
+];
+
