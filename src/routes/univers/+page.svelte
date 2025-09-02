@@ -8,26 +8,26 @@
   import { armyUnits } from '$lib/utils/units';
   import { getBuildingLevel } from '$lib/utils/nodeUtils';
 
-  // État général
+  // ==== État général
   let user: User | null = null;
   let allNodes: any[] = [];
   let allMines: any[] = [];
   let myNode: any = null;
   let loading = true;
 
-  // Carte & navigation
+  // ==== Carte & navigation
   let center = { x: 100, y: 100 };
   let zoom = 1;
   let dragging = false;
   let last = { x: 0, y: 0 };
 
-  // Tooltips
+  // ==== Tooltips
   let showTooltip = false;
   let tooltipContent = '';
   let tooltipX = 0;
   let tooltipY = 0;
 
-  // Panneau d’envoi
+  // ==== Panneau d’envoi
   let showSendArmyPanel = false;
   let sendTarget: any = null;
   let sendError = writable('');
@@ -36,44 +36,43 @@
   let maxTotalToSend = 1000;
   let selectedUnitsKeys: string[] = [];
 
-  // Ordres d’armée en cours
+  // ==== Ordres d’armée en cours
   let armyOrders: any[] = [];
   let unsubOrders: Unsubscribe | null = null;
 
-  // Gère les nodes et mines
+  // ==== Gère les nodes et mines
   let unsubNodes: Unsubscribe | null = null;
   let unsubMines: Unsubscribe | null = null;
   let unsubAuth: any = null;
 
-  // --- Sélection dynamique de l’armée à envoyer
-$: {
-  if (myNode?.army?.units) {
-    selectedUnitsKeys = Object.keys(myNode.army.units).filter(key => myNode.army.units[key] > 0);
-    let obj: { [key: string]: number } = {};
-    selectedUnitsKeys.forEach(key => obj[key] = 0);
-    armySelection.set(obj);
+  // ==== Sélection dynamique de l’armée à envoyer
+  $: {
+    if (myNode?.army?.units) {
+      selectedUnitsKeys = Object.keys(myNode.army.units).filter(key => myNode.army.units[key] > 0);
+      let obj: { [key: string]: number } = {};
+      selectedUnitsKeys.forEach(key => obj[key] = 0);
+      armySelection.set(obj);
+    }
   }
-}
 
-
-  // --- Limite max envoi : centre de commandement
+  // ==== Limite max envoi (centre de commandement)
   function getCommandCenterLimit(node: any): number {
     if (!node?.constructions?.commandCenter) return 1000;
     return 1000 + (node.constructions.commandCenter - 1) * 500;
   }
 
-  // --- Ouvre panneau envoi
- function openSendArmyPanel(target: any) {
-  sendTarget = target;
-  showSendArmyPanel = true;
-  sendError.set('');
-  if (myNode?.army?.units) {
-    maxTotalToSend = getCommandCenterLimit(myNode);
-    let obj: { [key: string]: number } = {};
-    Object.keys(myNode.army.units).forEach(key => obj[key] = 0);
-    armySelection.set(obj);
+  // ==== Ouvre panneau envoi
+  function openSendArmyPanel(target: any) {
+    sendTarget = target;
+    showSendArmyPanel = true;
+    sendError.set('');
+    if (myNode?.army?.units) {
+      maxTotalToSend = getCommandCenterLimit(myNode);
+      let obj: { [key: string]: number } = {};
+      Object.keys(myNode.army.units).forEach(key => obj[key] = 0);
+      armySelection.set(obj);
+    }
   }
-}
 
   function closeSendArmyPanel() {
     showSendArmyPanel = false;
@@ -81,7 +80,7 @@ $: {
     sendError.set('');
   }
 
-  // --- Calcul du temps de trajet
+  // ==== Calcul du temps de trajet
   function getArmyTravelInfo(selection: { [key: string]: number }) {
     if (!sendTarget || !myNode?.pos) return { speed: 1, duration: 0, distance: 0, display: "0s" };
     let slowest = 9999;
@@ -113,21 +112,20 @@ $: {
     return `${sec}s`;
   }
 
-  // --- Validation de l’envoi
-function canSendArmy($armySelection: {[key:string]:number}): boolean {
-  if (!myNode?.army?.units) return false;
-  const total = Object.entries($armySelection).reduce((sum, [unit, qty]) => sum + (qty || 0), 0);
-  if (total === 0) return false;
-  if (total > maxTotalToSend) return false;
-  for (const [unit, qty] of Object.entries($armySelection)) {
-    if (qty > (myNode.army.units[unit] || 0)) return false;
-    if (qty < 0) return false;
+  // ==== Validation de l’envoi
+  function canSendArmy($armySelection: {[key:string]:number}): boolean {
+    if (!myNode?.army?.units) return false;
+    const total = Object.entries($armySelection).reduce((sum, [unit, qty]) => sum + (qty || 0), 0);
+    if (total === 0) return false;
+    if (total > maxTotalToSend) return false;
+    for (const [unit, qty] of Object.entries($armySelection)) {
+      if (qty > (myNode.army.units[unit] || 0)) return false;
+      if (qty < 0) return false;
+    }
+    return true;
   }
-  return true;
-}
 
-
-  // --- Envoi d'une armée (création dans Firestore)
+  // ==== ENVOI D’UNE ARMÉE (création Firestore, adaptation node libre/contest)
   async function sendArmy() {
     sendInProgress.set(true);
     sendError.set('');
@@ -139,15 +137,37 @@ function canSendArmy($armySelection: {[key:string]:number}): boolean {
       return;
     }
 
-    // On retire immédiatement du stock local
-   let updatedArmy = { ...myNode.army, units: { ...myNode.army.units } };
-for (const [unit, qty] of Object.entries($armySelection)) {
-  updatedArmy.units[unit] = (updatedArmy.units[unit] || 0) - qty;
-  if (updatedArmy.units[unit] < 0) updatedArmy.units[unit] = 0;
-}
+    // === Préparation logique “node libre”
+    let isNodeLibre = !sendTarget.owner && !sendTarget.capturedBy;
+    let minUnitsForCapture = 10;   // À paramétrer à ta guise
+    let resourceCost = { cpu: 100, data: 100, bandwidth: 100 }; // À paramétrer
+    let hasEnoughUnits = Object.values($armySelection).reduce((sum, v) => sum + v, 0) >= minUnitsForCapture;
+    let hasEnoughRes = myNode?.resources
+      && myNode.resources.cpu >= resourceCost.cpu
+      && myNode.resources.data >= resourceCost.data
+      && myNode.resources.bandwidth >= resourceCost.bandwidth;
 
+    if (isNodeLibre) {
+      if (!hasEnoughUnits) {
+        sendError.set(`Il faut au moins ${minUnitsForCapture} unités pour capturer un node libre.`);
+        sendInProgress.set(false);
+        return;
+      }
+      if (!hasEnoughRes) {
+        sendError.set(`Pas assez de ressources pour capturer ce node libre.`);
+        sendInProgress.set(false);
+        return;
+      }
+    }
 
-    // Création du document armyOrder Firestore
+    // --- Décrémente l’armée locale tout de suite (UX)
+    let updatedArmy = { ...myNode.army, units: { ...myNode.army.units } };
+    for (const [unit, qty] of Object.entries($armySelection)) {
+      updatedArmy.units[unit] = (updatedArmy.units[unit] || 0) - qty;
+      if (updatedArmy.units[unit] < 0) updatedArmy.units[unit] = 0;
+    }
+
+    // --- Préparation infos pour Firestore
     const { duration } = getArmyTravelInfo($armySelection);
     const arrivesAt = Date.now() + duration * 1000;
     try {
@@ -163,11 +183,26 @@ for (const [unit, qty] of Object.entries($armySelection)) {
         arrivesAt,
         duration,
         status: "enCours",
+        // --- Infos spécifiques pour node libre (capturable)
+        isNodeLibre,
+        minUnitsForCapture,
+        resourceCost: isNodeLibre ? resourceCost : null
       });
-      // MAJ du node local pour décrémenter l'armée visuellement tout de suite
-     myNode = { ...myNode, army: { ...updatedArmy } };
-      selectedNode.set(myNode);
 
+      // --- Décrémente visuellement armée et res
+      myNode = { ...myNode, army: { ...updatedArmy } };
+      if (isNodeLibre) {
+        myNode = {
+          ...myNode,
+          resources: {
+            ...myNode.resources,
+            cpu: myNode.resources.cpu - resourceCost.cpu,
+            data: myNode.resources.data - resourceCost.data,
+            bandwidth: myNode.resources.bandwidth - resourceCost.bandwidth
+          }
+        };
+      }
+      selectedNode.set(myNode);
 
       sendError.set('');
       sendInProgress.set(false);
@@ -178,7 +213,7 @@ for (const [unit, qty] of Object.entries($armySelection)) {
     }
   }
 
-  // --- Affichage ordres en attente pour ton node
+  // ==== Affichage ordres en attente pour ton node
   function listenArmyOrders() {
     if (unsubOrders) unsubOrders();
     if (!user || !myNode) return;
@@ -192,7 +227,7 @@ for (const [unit, qty] of Object.entries($armySelection)) {
     });
   }
 
-  // --- Map / Navigation / Pan/Zoom
+  // ==== Map / Navigation / Pan/Zoom
   function preventSelect(e: Event) { e.preventDefault(); return false; }
   function refreshMyNode() { myNode = allNodes.find(n => n.owner === user?.uid); }
   function centerOnMine() { if (myNode?.pos) { center.x = myNode.pos.x; center.y = myNode.pos.y; } }
@@ -264,7 +299,7 @@ for (const [unit, qty] of Object.entries($armySelection)) {
     if (["ArrowDown","s"].includes(e.key)) center.y += 1;
   }
 
-  // --- Initialisation
+  // ==== Initialisation
   onMount(() => {
     unsubAuth = auth.onAuthStateChanged((u) => {
       user = u;
@@ -297,7 +332,6 @@ for (const [unit, qty] of Object.entries($armySelection)) {
   });
 
 </script>
-
 
 <style>
 .svg-map {

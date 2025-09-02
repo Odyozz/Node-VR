@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { auth, db } from '$lib/firebase';
-  import { doc, updateDoc, getDocs, collection, query, where } from 'firebase/firestore';
+  import { doc, updateDoc, getDocs, collection, query, where, onSnapshot } from 'firebase/firestore';
   import type { User } from 'firebase/auth';
   import { armyUnits } from '$lib/utils/units';
   import { getArmyUnitTimeWithBonus } from '$lib/utils/unitUtils';
@@ -13,37 +13,61 @@
   let loading = true;
   let errorMsg = '';
 
+  let myNode: NodeData | null = null;
   let armyStock: Record<string, number> = {};
   let prodQueue: ArmyQueueItem[] = [];
   let qty: Record<string, number> = {};
 
   const currentTime = writable(Date.now());
-  let intervalId: ReturnType<typeof setInterval>;
+  let intervalId: ReturnType<typeof setInterval> | undefined;
+  let unsubNode: (() => void) | undefined;
 
-  $: myNode = $selectedNode;
-
-  // Patch de récupération du node actif si null
-  async function ensureSelectedNode() {
-    if (!user) return;
-    if (get(selectedNode)) return;
-    const q = query(collection(db, "nodes"), where("owner", "==", user.uid));
+  // Live update depuis Firestore pour garantir la vérité du node !
+  async function subscribeToMyNode(u: User | null) {
+    if (!u) return;
+    // Cherche le node du joueur
+    const q = query(collection(db, "nodes"), where("owner", "==", u.uid));
     const snap = await getDocs(q);
     if (snap.docs.length > 0) {
-      const firstNode = { id: snap.docs[0].id, ...snap.docs[0].data() };
-      selectedNode.set(firstNode);
+      const docNode = snap.docs[0];
+      if (unsubNode) unsubNode();
+      const nodeRef = doc(db, "nodes", docNode.id);
+      unsubNode = onSnapshot(nodeRef, (docSnap) => {
+        if (docSnap.exists()) {
+          myNode = { id: docSnap.id, ...docSnap.data() } as NodeData;
+          selectedNode.set(myNode); // MAJ le store global aussi si tu veux !
+          // MAJ les stocks ici
+          armyStock = myNode.army?.units ?? {};
+          prodQueue = myNode.army?.queue ?? [];
+        }
+      });
     }
   }
 
-  // Mise à jour automatique dès que le node sélectionné change (ou dès la MAJ Firestore)
-  $: if (myNode) {
-    armyStock = myNode.army?.units || {};
-    prodQueue = myNode.army?.queue || [];
+  // Initialisation, connexion, tick 1s pour la prod
+  onMount(() => {
+    auth.onAuthStateChanged(async (u) => {
+      user = u;
+      loading = false;
+      await subscribeToMyNode(user);
+
+      intervalId = setInterval(async () => {
+        currentTime.set(Date.now());
+        await handleProdFinished();
+      }, 1000);
+    });
+  });
+
+  onDestroy(() => {
+    if (intervalId) clearInterval(intervalId);
+    if (unsubNode) unsubNode();
+  });
+
+  // Remplis qty[] pour tous les types d’unité
+  $: {
     for (const unit of armyUnits) {
       if (!(unit.key in qty)) qty[unit.key] = 1;
     }
-  } else {
-    armyStock = {};
-    prodQueue = [];
   }
 
   // Lancement de la prod d'unités
@@ -63,13 +87,13 @@
       cpu: unit.baseCost.cpu * quantity,
       bandwidth: unit.baseCost.bandwidth * quantity,
     };
-    const r = myNode.resources || { data: 0, cpu: 0, bandwidth: 0 };
+    const r = myNode.resources ?? { data: 0, cpu: 0, bandwidth: 0 };
     if (r.data < totalCost.data || r.cpu < totalCost.cpu || r.bandwidth < totalCost.bandwidth) {
       errorMsg = "Ressources insuffisantes";
       return;
     }
 
-    // File prod locale
+    // File prod locale (utilise la queue la plus à jour)
     const prodTime = getArmyUnitTimeWithBonus(myNode, unit);
     const now = Date.now();
     let lastEnd = prodQueue.length > 0 ? prodQueue[prodQueue.length-1].endsAt : now;
@@ -81,7 +105,7 @@
 
     // Débit ressources du node courant, puis MAJ en BDD
     const nodeRef = doc(db, 'nodes', myNode.id);
-    const newResources = { ...myNode.resources };
+    const newResources = { ...r };
     newResources.data -= totalCost.data;
     newResources.cpu -= totalCost.cpu;
     newResources.bandwidth -= totalCost.bandwidth;
@@ -92,8 +116,7 @@
         'army.queue': newQueue,
       });
       errorMsg = '';
-      // Patch local UI instantanée
-      selectedNode.set({ ...myNode, resources: newResources, army: { ...myNode.army, queue: newQueue } });
+      // La MAJ UI sera auto avec le onSnapshot !
     } catch (e) {
       errorMsg = "Erreur lors du lancement de la production";
     }
@@ -101,23 +124,22 @@
 
   // Gestion de la fin de prod (tick 1s)
   async function handleProdFinished() {
-    if (!myNode || prodQueue.length === 0) return;
+    if (!myNode || !myNode.army?.queue || myNode.army.queue.length === 0) return;
     const now = Date.now();
-    const done: ArmyQueueItem[] = prodQueue.filter(item => item.endsAt <= now);
+    const done: ArmyQueueItem[] = myNode.army.queue.filter(item => item.endsAt <= now);
     if (done.length === 0) return;
-    const stillInQueue = prodQueue.filter(item => item.endsAt > now);
+    const stillInQueue = myNode.army.queue.filter(item => item.endsAt > now);
 
-    const newStock = { ...armyStock };
+    const newStock = { ...(myNode.army.units ?? {}) };
     for (const item of done) {
-      newStock[item.key] = (newStock[item.key] || 0) + (item.qty || 1);
+      newStock[item.key] = (newStock[item.key] ?? 0) + (item.qty ?? 1);
     }
     const nodeRef = doc(db, 'nodes', myNode.id);
     await updateDoc(nodeRef, {
       'army.units': newStock,
       'army.queue': stillInQueue
     });
-    // MAJ locale UI
-    selectedNode.set({ ...myNode, army: { ...myNode.army, units: newStock, queue: stillInQueue } });
+    // MAJ UI par onSnapshot
   }
 
   // Gestion déverrouillage unités
@@ -153,23 +175,6 @@
     }
     return out;
   }
-
-  onMount(() => {
-    auth.onAuthStateChanged(async (u) => {
-      user = u;
-      // Assure qu'on a bien un node sélectionné après login ou navigation
-      loading = false;
-      await ensureSelectedNode();
-      intervalId = setInterval(async () => {
-        currentTime.set(Date.now());
-        await handleProdFinished();
-      }, 1000);
-    });
-  });
-
-  onDestroy(() => {
-    clearInterval(intervalId);
-  });
 </script>
 
 <style>
@@ -386,13 +391,13 @@
             <div class="army-header">
               <img src={"/images/" + unit.key + ".png"} alt={unit.name} class="army-img" />
               <div class="army-qty">
-                x{armyStock[unit.key] || 0}
+                x{armyStock[unit.key] ?? 0}
               </div>
             </div>
             <h2 class="text-xl font-semibold mb-1">{unit.name}</h2>
             <p class="army-desc">{unit.description}</p>
             <div class="stats">
-              Attaque : <b>{unit.attack || 0}</b> | Défense : <b>{unit.defense || 0}</b> | Vitesse : <b>{unit.speed || 0}</b> | Transport : <b>{unit.capacity ?? '-'}</b>
+              Attaque : <b>{unit.attack ?? 0}</b> | Défense : <b>{unit.defense ?? 0}</b> | Vitesse : <b>{unit.speed ?? 0}</b> | Transport : <b>{unit.capacity ?? '-'}</b>
             </div>
             <p class="costs">
               Coût recrutement :
@@ -412,12 +417,12 @@
           <li class="border rounded-lg p-4 shadow bg-gray-900 text-gray-600 cursor-not-allowed opacity-60 relative">
             <div class="army-header">
               <img src={"/images/" + unit.key + ".png"} alt={unit.name} class="army-img grayscale opacity-40" />
-              <div class="army-qty">x{armyStock[unit.key] || 0}</div>
+              <div class="army-qty">x{armyStock[unit.key] ?? 0}</div>
             </div>
             <h2 class="text-xl font-semibold mb-1">{unit.name}</h2>
             <p class="army-desc">{unit.description}</p>
             <div class="stats">
-              Attaque : <b>{unit.attack || 0}</b> | Défense : <b>{unit.defense || 0}</b> | Vitesse : <b>{unit.speed || 0}</b> | Transport : <b>{unit.capacity ?? '-'}</b>
+              Attaque : <b>{unit.attack ?? 0}</b> | Défense : <b>{unit.defense ?? 0}</b> | Vitesse : <b>{unit.speed ?? 0}</b> | Transport : <b>{unit.capacity ?? '-'}</b>
             </div>
             <p class="costs">
               Coût recrutement :
