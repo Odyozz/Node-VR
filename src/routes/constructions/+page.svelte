@@ -15,6 +15,9 @@
   } from '$lib/utils/nodeUtils';
 
   import { getNodeBonuses } from '$lib/utils/bonusUtils';
+  import { getConstructionImage } from '$lib/utils/imageAssets';
+  import { addNotification } from '$lib/stores/notifications';
+  import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 
   type Construction = {
     id: string;
@@ -192,12 +195,14 @@
     if (!myNode) return;
     if (isAnyUpgradeInProgress()) {
       errorMsg = "Une autre amélioration est déjà en cours.";
+      addNotification('warning', 'Upgrade en cours', 'Une amélioration est déjà en cours sur ce node');
       return;
     }
     const build = CONSTRUCTIONS.find(c => c.id === buildingId);
     if (!build) return;
     if (!meetsPrereqs(build)) {
       errorMsg = "Les prérequis ne sont pas remplis.";
+      addNotification('warning', 'Prérequis manquants', 'Les prérequis pour cette construction ne sont pas remplis');
       return;
     }
     const buildingLevel = getBuildingLevel(myNode, buildingId);
@@ -208,9 +213,13 @@
     };
     if (!canAfford(cost)) {
       errorMsg = "Ressources insuffisantes pour cet upgrade";
+      addNotification('warning', 'Ressources insuffisantes', 'Pas assez de ressources pour cette amélioration');
       return;
     }
     errorMsg = '';
+    
+    addNotification('info', 'Amélioration lancée', `Amélioration de ${build.name} démarrée`);
+    
     try {
       const nodeRef = doc(db, 'nodes', myNode.id);
       const newResources = { ...myNode.resources };
@@ -229,6 +238,7 @@
       upgradesInProgress[buildingId] = endTimestamp;
     } catch (e) {
       errorMsg = "Erreur lors de l'upgrade";
+      addNotification('error', 'Erreur', errorMsg);
       console.error('Upgrade error:', e);
       await fetchUserAndNode();
     }
@@ -245,6 +255,10 @@
         for (const [key, endTime] of Object.entries(upgradesInProgress) as [string, number][]) {
           if (endTime <= get(currentTime)) {
             await handleUpgradeFinished(key);
+            const build = CONSTRUCTIONS.find(c => c.id === key);
+            if (build) {
+              addNotification('success', 'Amélioration terminée', `${build.name} a été améliorée !`);
+            }
             delete upgradesInProgress[key];
             changed = true;
           }
@@ -426,7 +440,7 @@
   {/if}
   
   {#if loading}
-    <p class="text-center text-white">Chargement...</p>
+    <LoadingSpinner />
   {:else if !user}
     <p class="text-center text-white">Connecte-toi pour gérer tes constructions.</p>
   {:else if !myNode}
@@ -438,7 +452,7 @@
         {#if meetsPrereqs(build)}
           <li>
             <div class="construction-header">
-              <img src={build.img} alt={build.name} class="construction-img" />
+              <img src={getConstructionImage(build.id)} alt={build.name} class="construction-img" />
               <div class="badge-level">
                 Niveau {getBuildingLevel(myNode, build.id)}
               </div>

@@ -6,6 +6,11 @@
   import { goto } from '$app/navigation';
   import type { User } from "firebase/auth";
   import { resources } from '$lib/stores/resources';
+  import { maxResources } from '$lib/stores/maxResources';
+  import ResourceBar from '$lib/components/ResourceBar.svelte';
+  import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
+  import { addNotification } from '$lib/stores/notifications';
+  import { getMineProduction } from '$lib/utils/nodeUtils';
 
   let user: User | null = null;
   let myNodes: any[] = [];
@@ -19,8 +24,10 @@
     if (!user) return;
     try {
       await assignRandomNodeToUser(user);
+      addNotification('success', 'Node assigné', 'Votre premier node vous a été assigné avec succès !');
     } catch (e) {
       errorMsg = e instanceof Error ? e.message : String(e);
+      addNotification('error', 'Erreur', errorMsg);
     }
   }
 
@@ -34,6 +41,11 @@
       // Si pas de node => assignation automatique
       if (myNodes.length === 0) {
         await assignSpawnNode();
+      } else {
+        // Notification de bienvenue pour les utilisateurs existants
+        if (myNodes.length === 1) {
+          addNotification('info', 'Bienvenue', 'Gérez vos ressources et développez votre empire numérique !', false);
+        }
       }
       loading = false;
     });
@@ -114,6 +126,67 @@
     color: #d17b7b;
     font-style: italic;
   }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .stat-card {
+    background: rgba(30, 30, 47, 0.75);
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid rgba(90, 127, 168, 0.3);
+  }
+  .stat-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #aabedc;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .node-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    background: #1e1e2f;
+    border-radius: 8px;
+    margin-bottom: 0.5rem;
+  }
+  .node-name {
+    font-weight: 600;
+    color: #5a7fa8;
+  }
+  .node-coords {
+    color: #34d399;
+    font-size: 0.9rem;
+  }
+  .production-summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 1rem;
+  }
+  .prod-item {
+    text-align: center;
+    padding: 8px;
+    background: rgba(52, 211, 153, 0.1);
+    border-radius: 6px;
+    border: 1px solid rgba(52, 211, 153, 0.3);
+  }
+  .prod-value {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #34d399;
+  }
+  .prod-label {
+    font-size: 0.8rem;
+    color: #9ca3af;
+    margin-top: 2px;
+  }
 </style>
 
 <div class="dashboard">
@@ -124,39 +197,77 @@
   {:else}
     <section class="section">
       <h3>Ressources globales</h3>
-      <div class="resources">
-        <div>💾 {$resources.data} Données</div>
-        <div>⚡ {$resources.cpu} CPU</div>
-        <div>📡 {$resources.bandwidth} Bande Passante</div>
-      </div>
+      <ResourceBar />
     </section>
 
-    <section class="section">
-      <h3>Tes Nodes</h3>
-      {#if loading}
-        <p>Chargement...</p>
-      {:else if myNodes.length === 0}
-        <p class="alert">Aucun node trouvé.</p>
-      {:else}
-        <ul class="nodes">
+    {#if loading}
+      <LoadingSpinner />
+    {:else if myNodes.length === 0}
+      <section class="section">
+        <p class="alert">Attribution d'un node en cours...</p>
+      </section>
+    {:else}
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h3 class="stat-title">
+            🏭 Vos Nodes ({myNodes.length})
+          </h3>
           {#each myNodes as node}
-            <li>
-              <div><b>{node.name}</b> — Position : ({node.pos.x}, {node.pos.y})</div>
+            <div class="node-summary">
               <div>
-                💾 {node.resources.data} &nbsp; ⚡ {node.resources.cpu} &nbsp; 📡 {node.resources.bandwidth}
+                <div class="node-name">{node.name}</div>
+                <div class="node-coords">({node.pos.x}, {node.pos.y})</div>
               </div>
-            </li>
+              <div class="text-right">
+                <div class="text-sm text-gray-400">Ressources stockées</div>
+                <div class="text-xs">
+                  💾 {node.resources.data} | ⚡ {node.resources.cpu} | 📡 {node.resources.bandwidth}
+                </div>
+              </div>
+            </div>
           {/each}
-        </ul>
-      {/if}
-    </section>
+        </div>
 
-    <section class="section">
-      <h3>Alertes</h3>
-      <div class="alert">[À venir : alertes d’attaque, upgrades, alliance...]</div>
-      {#if errorMsg}
+        <div class="stat-card">
+          <h3 class="stat-title">
+            ⚡ Production par heure
+          </h3>
+          {#if myNodes[0]}
+            <div class="production-summary">
+              <div class="prod-item">
+                <div class="prod-value">{getMineProduction(myNodes[0], 'mineData') * 3600}</div>
+                <div class="prod-label">💾 Data/h</div>
+              </div>
+              <div class="prod-item">
+                <div class="prod-value">{getMineProduction(myNodes[0], 'mineCPU') * 3600}</div>
+                <div class="prod-label">⚡ CPU/h</div>
+              </div>
+              <div class="prod-item">
+                <div class="prod-value">{getMineProduction(myNodes[0], 'mineBandwidth') * 3600}</div>
+                <div class="prod-label">📡 Bandwidth/h</div>
+              </div>
+            </div>
+          {/if}
+        </div>
+
+        <div class="stat-card">
+          <h3 class="stat-title">
+            🎯 Actions rapides
+          </h3>
+          <div class="flex flex-col gap-2">
+            <a href="/constructions" class="btn-mini">🏗️ Gérer les constructions</a>
+            <a href="/army" class="btn-mini">⚔️ Recruter des unités</a>
+            <a href="/univers" class="btn-mini">🌌 Explorer l'univers</a>
+            <a href="/tech" class="btn-mini">🔬 Rechercher des technologies</a>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    {#if errorMsg}
+      <section class="section">
         <div class="alert">{errorMsg}</div>
-      {/if}
-    </section>
+      </section>
+    {/if}
   {/if}
 </div>

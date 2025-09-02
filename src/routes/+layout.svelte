@@ -10,6 +10,8 @@
   import { maxResources } from '$lib/stores/maxResources';
   import { getMineProduction, getStorageMax, type NodeData } from '$lib/utils/nodeUtils';
   import { get } from 'svelte/store';
+  import NotificationCenter from '$lib/components/NotificationCenter.svelte';
+  import { addNotification } from '$lib/stores/notifications';
 
   let user: User | null = null;
   $: currentPath = $page.url.pathname;
@@ -21,6 +23,7 @@
   let myNode: NodeData | null = null;
   let nodeId: string | null = null;
   let intervalId: ReturnType<typeof setInterval>;
+  let lastResourceCheck = { data: 0, cpu: 0, bandwidth: 0 };
 
   // Abonne-toi en temps réel au node du joueur
   async function subscribeNode(uid: string) {
@@ -53,6 +56,9 @@
         // Met à jour les CAP dynamiquement
         const max = getStorageMax(myNode);
         maxResources.set({ data: max.data, cpu: max.cpu, bandwidth: max.bandwidth });
+        
+        // Notifications pour ressources pleines
+        checkResourceAlerts(data, cpu, bandwidth, max);
       } else {
         myNode = null;
         nodeId = null;
@@ -60,6 +66,22 @@
         maxResources.set({ data: 0, cpu: 0, bandwidth: 0 });
       }
     });
+  }
+
+  function checkResourceAlerts(data: number, cpu: number, bandwidth: number, max: any) {
+    const threshold = 0.95; // 95% de capacité
+    
+    if (data >= max.data * threshold && lastResourceCheck.data < max.data * threshold) {
+      addNotification('warning', 'Stockage Data plein', 'Vos hangars de données sont presque pleins !');
+    }
+    if (cpu >= max.cpu * threshold && lastResourceCheck.cpu < max.cpu * threshold) {
+      addNotification('warning', 'Stockage CPU plein', 'Vos hangars CPU sont presque pleins !');
+    }
+    if (bandwidth >= max.bandwidth * threshold && lastResourceCheck.bandwidth < max.bandwidth * threshold) {
+      addNotification('warning', 'Stockage Bandwidth plein', 'Vos hangars de bande passante sont presque pleins !');
+    }
+    
+    lastResourceCheck = { data, cpu, bandwidth };
   }
 
   // Production auto chaque seconde
@@ -160,6 +182,7 @@
 </nav>
 {/if}
 
+<NotificationCenter />
 <slot />
 
 <style>

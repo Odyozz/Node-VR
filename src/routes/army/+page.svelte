@@ -8,6 +8,9 @@
   import type { NodeData, ArmyUnitKey, ArmyUnitDefinition, ArmyQueueItem } from '$lib/types';
   import { writable, get } from 'svelte/store';
   import { selectedNode } from '$lib/stores/selectedNode';
+  import { getUnitImage } from '$lib/utils/imageAssets';
+  import { addNotification } from '$lib/stores/notifications';
+  import LoadingSpinner from '$lib/components/LoadingSpinner.svelte';
 
   let user: User | null = null;
   let loading = true;
@@ -93,6 +96,8 @@
       return;
     }
 
+    
+    addNotification('info', 'Production lancée', `Production de ${quantity} ${unit.name} démarrée`);
     // File prod locale (utilise la queue la plus à jour)
     const prodTime = getArmyUnitTimeWithBonus(myNode, unit);
     const now = Date.now();
@@ -119,6 +124,7 @@
       // La MAJ UI sera auto avec le onSnapshot !
     } catch (e) {
       errorMsg = "Erreur lors du lancement de la production";
+      addNotification('error', 'Erreur', errorMsg);
     }
   }
 
@@ -134,6 +140,13 @@
     for (const item of done) {
       newStock[item.key] = (newStock[item.key] ?? 0) + (item.qty ?? 1);
     }
+    
+    // Notification pour unités terminées
+    if (done.length > 0) {
+      const unitsCompleted = done.map(item => `${item.qty} ${armyUnits.find(u => u.key === item.key)?.name}`).join(', ');
+      addNotification('success', 'Production terminée', `Unités prêtes: ${unitsCompleted}`);
+    }
+    
     const nodeRef = doc(db, 'nodes', myNode.id);
     await updateDoc(nodeRef, {
       'army.units': newStock,
@@ -360,7 +373,7 @@
   <h1 class="text-4xl font-extrabold mb-6 text-center text-white">Armée</h1>
 
   {#if loading}
-    <p class="text-center text-white">Chargement...</p>
+    <LoadingSpinner />
   {:else if !user}
     <p class="text-center text-white">Connecte-toi pour gérer ton armée.</p>
   {:else if !myNode}
@@ -373,7 +386,7 @@
         <div class="prod-bar-title">Production en cours :</div>
         {#each prodQueue as item (item.endsAt)}
           <div class="prod-bar-item">
-            <img src={"/images/" + item.key + ".png"} alt={item.key} class="army-img-prod" />
+            <img src={getUnitImage(item.key)} alt={item.key} class="army-img-prod" />
             <div class="prod-bar-unit">{armyUnits.find(u => u.key === item.key)?.name}</div>
             <div class="prod-bar-qty">+{item.qty}</div>
             <div class="prod-bar-timer">
@@ -389,7 +402,7 @@
         {#if isUnitUnlocked(unit, myNode)}
           <li>
             <div class="army-header">
-              <img src={"/images/" + unit.key + ".png"} alt={unit.name} class="army-img" />
+              <img src={getUnitImage(unit.key)} alt={unit.name} class="army-img" />
               <div class="army-qty">
                 x{armyStock[unit.key] ?? 0}
               </div>
@@ -416,7 +429,7 @@
         {:else}
           <li class="border rounded-lg p-4 shadow bg-gray-900 text-gray-600 cursor-not-allowed opacity-60 relative">
             <div class="army-header">
-              <img src={"/images/" + unit.key + ".png"} alt={unit.name} class="army-img grayscale opacity-40" />
+              <img src={getUnitImage(unit.key)} alt={unit.name} class="army-img grayscale opacity-40" />
               <div class="army-qty">x{armyStock[unit.key] ?? 0}</div>
             </div>
             <h2 class="text-xl font-semibold mb-1">{unit.name}</h2>
